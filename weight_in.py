@@ -2,7 +2,7 @@ import os
 import requests
 import datetime
 import dateutil.parser as parsedate
-from flask import Flask, jsonify, request
+from flask import jsonify, request
 
 # api_key = os.environ['QUANDL_APIKEY']
 
