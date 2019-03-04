@@ -4,17 +4,17 @@ import datetime
 import dateutil.parser as parsedate
 from flask import jsonify, request
 
-# api_key = os.environ['QUANDL_APIKEY']
 
-root_url = 'https://www.quandl.com/api/v3/datasets/'
+
+QUANDL_ROOT_URL = 'https://www.quandl.com/api/v3/datasets/'
 
 static_params = (
-    ('api_key', 'WsDSG12F6dWzyHV5y_9o'),
+    ('api_key', os.environ['QUANDL_APIKEY']),
     ('column_index', '1'),
     ('limit', '1')
 )
 
-metal_dict = {
+metal_commodities = {
     'silver': {
         'name': 'Silver',
         'index': 'LBMA',
@@ -60,10 +60,10 @@ metal_dict = {
 }
 
 
-def return_price(index, symbol):
+def get_price(index, symbol):
     new_price = {}
 
-    url = root_url + index + "/" + symbol + "/"
+    url = QUANDL_ROOT_URL + index + "/" + symbol + "/"
     response = requests.get(url=url, params=static_params)
 
     if response.status_code == 200:
@@ -76,27 +76,27 @@ def return_price(index, symbol):
 
 
 
-def check_pricing(metals):
+def update_prices(commodities):
     today = datetime.date.today().isoformat()
 
-    for i in metals:
+    for i in commodities:
         try:
             # verify that the metal has a price
-            metals[i]['spot_price']
+            commodities[i]['spot_price']
 
             # verify that the price isn't too old
-            price_date = metals[i]['spot_price']['date']
+            price_date = commodities[i]['spot_price']['date']
             delta = parsedate.parse(today) - parsedate.parse(price_date)
             assert(delta.days < 7)
 
             # log success
-            print("{} has price, is up to date".format(metals[i]['symbol']))
+            print("{} has price, is up to date".format(commodities[i]['symbol']))
         except:
-            metals[i]['spot_price'] = return_price(
-                metals[i]['index'],
-                metals[i]['symbol']
+            commodities[i]['spot_price'] = get_price(
+                commodities[i]['index'],
+                commodities[i]['symbol']
             )
-            print("Price updated for {}".format(metals[i]['symbol']))
+            print("Price updated for {}".format(commodities[i]['symbol']))
 
 
 
@@ -118,19 +118,19 @@ def price_by_weight(mass, price):
 
 
 
-def current_prices():
-    check_pricing(metal_dict)
+def current_base_prices():
+    update_prices(metal_commodities)
 
     response = {
         "status_code": 200,
-        "data": metal_dict
+        "data": metal_commodities
     }
     return jsonify(response)
 
 
 
-def everything():
-    check_pricing(metal_dict)
+def all_metals():
+    update_prices(metal_commodities)
 
     weight_in = {}
     weight_in_diff = {}
@@ -146,14 +146,14 @@ def everything():
 
         converted_mass = weight_conversion(weight, units)
 
-        for i in metal_dict:
+        for i in metal_commodities:
             price = price_by_weight(
                 converted_mass,
-                metal_dict[i]['spot_price']['price']
+                metal_commodities[i]['spot_price']['price']
             )
 
-            weight_in[metal_dict[i]['name']] = '${:,.2f}'.format(price)
-            weight_in_diff[metal_dict[i]['name']] = abs(networth - price)
+            weight_in[metal_commodities[i]['name']] = '${:,.2f}'.format(price)
+            weight_in_diff[metal_commodities[i]['name']] = abs(networth - price)
 
         response = {
             "status_code": 200,
@@ -171,15 +171,15 @@ def everything():
         print('Error: invalid args - {}'.format(error))
         response = {
             "status_code": 400,
-            "status": "badRequest: invalid arguments"
+            "status": "badRequest: invalid or missing arguments"
         }
 
     return jsonify(response)
 
 
 
-def weight_in(metal):
-    check_pricing(metal_dict)
+def single_metal(metal):
+    update_prices(metal_commodities)
 
     weight_in = {}
 
@@ -187,17 +187,17 @@ def weight_in(metal):
         weight = request.args.get('weight', type=int)
         units = request.args.get('units', type=str)
 
-        assert(metal.lower() in metal_dict.keys())
+        assert(metal.lower() in metal_commodities.keys())
         assert(weight is not None)
         assert(units == "lbs" or units == "kg")
 
         converted_mass = weight_conversion(weight, units)
         price = price_by_weight(
                 converted_mass,
-                metal_dict[metal.lower()]['spot_price']['price']
+                metal_commodities[metal.lower()]['spot_price']['price']
             )
 
-        weight_in = (metal_dict[metal.lower()]['name'], price)
+        weight_in = (metal_commodities[metal.lower()]['name'], price)
 
         response = {
             "status_code": 200,
@@ -211,7 +211,7 @@ def weight_in(metal):
         print('Error: invalid args - {}'.format(error))
         response = {
             "status_code": 400,
-            "status": "badRequest: invalid arguments"
+            "status": "badRequest: invalid or missing arguments"
         }
 
     return jsonify(response)
